@@ -1,0 +1,1427 @@
+---
+title: "Time Series Homework"
+format: 
+  pdf: 
+    toc: true
+editor: visual
+---
+
+```{css, echo = FALSE}
+p {
+  text-align: justify
+}
+```
+
+```{r}
+#| echo: false
+#| output: false
+#| warning: false
+library(MASS)
+library(tidyverse)
+library(zoo)
+library(lmtest)
+library(sandwich)
+library(knitr)
+library(e1071)
+library(smoots)
+library(forecast)
+library(dplyr)
+library(rugarch)
+library(urca)
+
+```
+
+```{r}
+#| echo: false
+directory <- "C:/Users/6the6/Documents/Time_series"
+```
+
+## Authors :
+
+Antoine Riollet and Francisco Gonzalez Garcia
+
+# Problem 1
+
+## 1.1: Question 1
+
+### 1.1.1: Price index
+
+```{r}
+# import the data
+priceindex1 <- read.csv("price index.csv")
+# rename the column
+priceindex1 <- rename(priceindex1, index = FRACPALTT01CTGYM)
+# create the time series
+priceindex <- ts(priceindex1[,2], frequency=12, start=c(2010,1))
+# structure
+str(priceindex)
+```
+
+```{r}
+# plot the time series
+autoplot(priceindex, col=2, xlab="Year", ylab="Contribution to annual inflation", main="Consumer price index, All items France", lwd=1)
+```
+
+The series shows a clear upward trend, particularly after 2020, suggesting non-stationarity.
+
+```{r}
+# descriptive statistics
+summary(priceindex)
+```
+
+The mean is around 1.69 and the maximum is above 6, indicating high variability likely linked to recent inflation shocks.
+
+```{r}
+# acf
+ggAcf(priceindex) + ggtitle("ACF for Price index")
+```
+
+The ACF shows a very slow decay typical of a non-stationary process.
+
+```{r}
+# pacf
+ggPacf(priceindex) + ggtitle("PACF for Price index")
+```
+
+The PACF suggests an AR(1) structure since the first lag is significant and then drops.
+
+```{r}
+# first difference
+priceindex_diff <- diff(priceindex)
+# plot
+ts.plot(priceindex_diff, col=2, main="Price index first difference")
+```
+
+The differenced series now looks much more stationary.
+
+```{r}
+# summary of first difference
+summary(priceindex_diff)
+```
+
+Variance is reduced, and the mean is close to zero as expected.
+
+```{r}
+# acf of first difference
+ggAcf(priceindex_diff) + ggtitle("ACF for Price index FD")
+```
+
+The ACF shows a quick decay indicating stationarity.
+
+```{r}
+# pacf of first difference
+ggPacf(priceindex_diff) + ggtitle("PACF for Price index FD")
+```
+
+The PACF confirms stationarity with only the first lag being significant.
+
+### 1.1.2: Inflation
+
+```{r}
+# import the data
+INF1 <- read.csv("inflation.csv")
+INF1 <- rename(INF1, inflation = FPCPITOTLZGFRA)
+inf <- ts(INF1[,2], frequency=1, start=c(1960,1))
+str(inf)
+```
+
+```{r}
+# plot the time series
+autoplot(inf, col=2, xlab="Year", ylab="Percent", main="Inflation, consumer prices for France", lwd=1)
+```
+
+The series shows several periods of high inflation (1970s-1980s) and a general decline afterward.
+
+```{r}
+# descriptive statistics
+summary(inf)
+```
+
+High variance and high maximum values confirm volatility during earlier periods.
+
+```{r}
+# acf
+ggAcf(inf) + ggtitle("ACF for Inflation")
+```
+
+ACF declines slowly, confirming the non-stationarity.
+
+```{r}
+# pacf
+ggPacf(inf) + ggtitle("PACF for Inflation")
+```
+
+PACF is significant at lag 1 but quickly vanishes.
+
+```{r}
+# first difference
+inf_diff <- diff(inf)
+ts.plot(inf_diff, col=2, main="Inflation first difference")
+```
+
+The differenced series looks stationary.
+
+```{r}
+# summary of first difference
+summary(inf_diff)
+```
+
+Variance is reduced and mean is closer to zero.
+
+```{r}
+# acf of first difference
+ggAcf(inf_diff) + ggtitle("ACF for Inflation FD")
+```
+
+Quick decay of ACF confirms stationarity.
+
+```{r}
+# pacf of first difference
+ggPacf(inf_diff) + ggtitle("PACF for Inflation FD")
+```
+
+PACF confirms that the first difference is close to a white noise.
+
+### 1.1.3: GDP
+
+```{r}
+GDP1 <- read.csv("real gdp.csv")
+GDP1 <- rename(GDP1, gdp = CLVMNACSCAB1GQFR)
+GDP <- ts(GDP1[,2], frequency=4, start=c(1975,1))
+str(GDP)
+```
+
+```{r}
+autoplot(GDP, col=2, xlab="Year", ylab="Millions of Chained 2010 Euros, Seasonally Adjusted", main="Gross Domestic Product France", lwd=1)
+```
+
+GDP shows a strong upward trend suggesting non-stationarity.
+
+```{r}
+summary(GDP)
+```
+
+Descriptive statistics confirm the trend and high variance.
+
+```{r}
+ggAcf(GDP) + ggtitle("ACF for GDP")
+```
+
+The ACF decreases slowly confirming non-stationarity.
+
+```{r}
+ggPacf(GDP) + ggtitle("PACF for GDP")
+```
+
+PACF significant at lag 1 suggests an AR(1) trend component.
+
+```{r}
+GDP_diff <- diff(GDP)
+ts.plot(GDP_diff, col=2, main="GDP first difference")
+```
+
+Differenced series appears stationary.
+
+```{r}
+summary(GDP_diff)
+```
+
+Reduced variance compared to the original series.
+
+```{r}
+ggAcf(GDP_diff) + ggtitle("ACF for GDP FD")
+```
+
+Quick drop of ACF confirms stationarity.
+
+```{r}
+ggPacf(GDP_diff) + ggtitle("PACF for GDP FD")
+```
+
+PACF indicates that the differenced series can be modeled as ARMA.
+
+### 1.1.4: Short-term interest rate
+
+```{r}
+interestrate1 <- read.csv("interest rate.csv")
+interestrate1 <- rename(interestrate1, rate = IRSTCI01FRM156N)
+interestrate <- ts(interestrate1[,2], frequency=12, start=c(1960,1))
+str(interestrate)
+```
+
+```{r}
+autoplot(interestrate, col=2, xlab="Year", ylab="Percent", main="Interest Rates: Immediate Rates (<24 Hours): Call Money/Interbank Rate: Total for France", lwd=1)
+```
+
+Clear evidence of changing variance and mean, especially high in the 1980s.
+
+```{r}
+summary(interestrate)
+```
+
+Descriptive statistics confirm large variance.
+
+```{r}
+ggAcf(interestrate) + ggtitle("ACF for Interest rate")
+```
+
+ACF shows slow decay and persistence.
+
+```{r}
+ggPacf(interestrate) + ggtitle("PACF for Interest rate")
+```
+
+PACF significant in first lags.
+
+```{r}
+interestrate_diff <- diff(interestrate)
+ts.plot(interestrate_diff, col=2, main="Interest rate first difference")
+```
+
+Variance looks more stable after differencing.
+
+```{r}
+summary(interestrate_diff)
+```
+
+Variance reduced and centered around zero.
+
+```{r}
+ggAcf(interestrate_diff) + ggtitle("ACF for Interest rate FD")
+```
+
+ACF decays faster suggesting stationarity.
+
+```{r}
+ggPacf(interestrate_diff) + ggtitle("PACF for Interest rate FD")
+```
+
+PACF also suggests weak short-term dependencies after differencing.
+
+### 1.1.5: Daily electricity consumption
+
+```{r}
+elec1 <- read_delim("elec.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+elec1 <- elec1[, c("Date", "Consommation brute électricité (MW) - RTE")]
+elec1 <- rename(elec1, cons = "Consommation brute électricité (MW) - RTE")
+elec1 <- elec1 %>% group_by(Date) %>% summarize(energy_consumed = sum(cons))
+elec <- ts(elec1[,2], frequency=365, start=c(2013,1))
+str(elec)
+```
+
+```{r}
+autoplot(elec, col=2, xlab="Year", ylab="Quantity", main="Daily electricity consumption for France", lwd=1)
+```
+
+Clear seasonality visible.
+
+```{r}
+summary(elec)
+```
+
+Descriptive statistics show high variability.
+
+```{r}
+ggAcf(elec) + ggtitle("ACF for Daily electricity consumption")
+```
+
+ACF shows strong seasonal autocorrelation.
+
+```{r}
+ggPacf(elec) + ggtitle("PACF for Daily electricity consumption")
+```
+
+PACF also shows seasonal patterns.
+
+```{r}
+elec_diff <- diff(elec)
+ts.plot(elec_diff, col=2, main="Daily electricity consumption first difference")
+```
+
+Differenced series looks more stable.
+
+```{r}
+summary(elec_diff)
+```
+
+Variance is lower.
+
+```{r}
+ggAcf(elec_diff) + ggtitle("ACF for Daily electricity consumption FD")
+```
+
+Seasonality still present but weaker.
+
+```{r}
+ggPacf(elec_diff) + ggtitle("PACF for Daily electricity consumption FD")
+```
+
+PACF confirms partial removal of seasonal pattern.
+
+## 1.2: Question 2
+
+### 1.2.0: Function definition
+
+```{r}
+#function to get best AR(p) by AIC (ar) and BIC (critMatrix)
+best_ar_model <- function(ts, name = "", max_lag = 10) {
+  #select p by minimizing AIC using ar()
+  aic_order <- ar(ts, aic = TRUE, order.max = max_lag)$order
+
+  #select p by minimizing BIC using critMatrix()
+  bic_values <- critMatrix(
+    ts,
+    p.max = max_lag,
+    q.max = 0,
+    criterion = "bic",
+    include.mean = TRUE
+  )
+  bic_order <- which(bic_values == min(bic_values)) - 1
+  
+  cat(name, "\n")
+  cat("Best AR(p) according to AIC : AR(",aic_order,")\n")
+  cat("Best AR(p) according to BIC : AR(",bic_order,")\n")
+}
+```
+
+### 1.2.1: Price Index
+
+```{r}
+best_ar_model(priceindex, name="Price Index", max_lag=10)
+best_ar_model(priceindex_diff, name="Price Index (diff)", max_lag=10)
+```
+
+For the price index, AIC selects AR(9) while BIC opts for AR(1). After differencing, the preferred orders are A
+
+R(2) and AR(0) respectively.
+
+### 1.2.2: Inflation
+
+```{r}
+best_ar_model(inf, name="Inflation", max_lag=10)
+best_ar_model(inf_diff, name="Inflation (diff)", max_lag=10)
+```
+
+In the case of inflation, both AIC and BIC suggest AR(1) for the level series, and AR(0) for the differenced series.
+
+### 1.2.3: GDP
+
+```{r}
+best_ar_model(GDP, name="GDP", max_lag=10)
+best_ar_model(GDP_diff, name="GDP (diff)", max_lag=10)
+```
+
+For GDP, AIC and BIC agree on AR(1) for the original series, and AR(2) for the differenced version.
+
+### 1.2.4: Interest Rate
+
+```{r}
+best_ar_model(interestrate, name="Interest Rate", max_lag=10)
+best_ar_model(interestrate_diff, name="Interest Rate (diff)", max_lag=10)
+```
+
+Regarding the interest rate, the preferred orders are AR(10) and AR(2) according to AIC and BIC, respectively. For the differenced data, AIC remains at AR(10) while BIC selects AR(1).
+
+### 1.2.5: Daily electricity consumption
+
+```{r}
+best_ar_model(elec, name="Electricity Consumption", max_lag=10)
+best_ar_model(elec_diff, name="Electricity Consumption (diff)", max_lag=10)
+```
+
+For both the original and differenced electricity consumption series, AIC and BIC consistently choose AR(10).
+
+It is important to note that for non-stationary processes (see the ones identified as such above) the assumptions underlying this choice are broken, hence these results may be considered valid only for the stationary processes.
+
+## 1.3: Question 3
+
+### 1.3.1: Price Index
+
+```{r}
+#estimate AR(2) model on differenced price index
+model_priceindex_diff <- ar(priceindex_diff, order.max=2)
+#forecast with h=3
+fc_priceindex_diff <- forecast::forecast(model_priceindex_diff, h=3)
+fc_priceindex_diff
+```
+
+The forecast shows moderate uncertainty with increasing variance as the forecast horizon grows.
+
+```{r}
+#plot forecast
+plot(fc_priceindex_diff, main="Price Index (diff) Forecast")
+```
+
+Forecast suggests that the differenced price index will stay close to recent values, with wider intervals after 3 periods.
+
+### 1.3.2: Inflation
+
+```{r}
+#estimate AR(1) model on inflation (non differenced)
+model_inflation <- ar(inf, order.max=1)
+#forecast with h=3
+fc_inflation <- forecast::forecast(model_inflation, h=3)
+fc_inflation
+```
+
+The inflation forecast seems relatively stable with narrow confidence bands.
+
+```{r}
+#plot forecast
+plot(fc_inflation, main="Inflation Forecast")
+```
+
+Graph indicates inflation is predicted to follow its recent trend with moderate fluctuations.
+
+### 1.3.3: GDP
+
+```{r}
+#estimate AR(2) model on differenced GDP
+model_GDP_diff <- ar(GDP_diff, order.max=2)
+#forecast with h=3
+fc_GDP_diff <- forecast::forecast(model_GDP_diff, h=3)
+fc_GDP_diff
+```
+
+Forecast indicates moderate variability over the next 3 periods.
+
+```{r}
+#plot forecast
+plot(fc_GDP_diff, main="GDP (diff) Forecast")
+```
+
+GDP difference forecast shows stable evolution without pronounced trend changes.
+
+### 1.3.4: Interest Rate
+
+```{r}
+#estimate AR(1) model on differenced interest rate
+model_rate_diff <- ar(interestrate_diff, order.max=1)
+#forecast with h=3
+fc_rate_diff <- forecast::forecast(model_rate_diff, h=3)
+fc_rate_diff
+```
+
+Short-term interest rates forecasts show moderate prediction intervals.
+
+```{r}
+#plot forecast
+plot(fc_rate_diff, main="Interest Rate (diff) Forecast")
+```
+
+Interest rate forecast indicates low volatility in upcoming periods.
+
+### 1.3.5: Electricity Consumption
+
+```{r}
+#estimate AR(10) model on differenced electricity consumption
+model_elec_diff <- ar(elec_diff, order.max=10)
+#forecast with h=3
+fc_elec_diff <- forecast::forecast(model_elec_diff, h=3)
+fc_elec_diff
+```
+
+Electricity consumption forecast shows higher uncertainty, probably due to seasonality and structural changes.
+
+```{r}
+#plot forecast
+plot(fc_elec_diff, main="Electricity Consumption (diff) Forecast")
+```
+
+The plot highlights the widening prediction interval, reflecting the variability of electricity consumption.
+
+# Problem 2
+
+## 2.1: Question 1
+
+### 2.1.1: Inflation
+
+```{r}
+#load the dataset
+df <- read.csv("inflation_us.csv")
+
+#we just use the year
+df$Date <- as.Date(paste0(df$Year, "-01-01"))
+
+#create the time series (annual)
+inf <- ts(df$Value, start=c(min(df$Year)), frequency=1)
+
+#check structure
+str(inf)
+```
+
+The dataset contains annual observations of the US inflation index. Each entry represents the value at the end of the year.
+
+```{r}
+#compute descriptive statistics
+summary(inf)
+```
+
+The inflation series has an average close to 3.67% and shows some extreme values, with a minimum of 1% and a maximum of 12.4%.The inflation does not look like a stationary process, since the mean, nor the variance look to be constant over the period considered.
+
+```{r}
+#plot the time series
+plot(inf, main="Inflation, consumer price for US", col=2, ylab="Percent", xlab="Year", lwd=2)
+```
+
+The graph highlights strong variations, particularly during the 1970s and early 1980s.
+
+```{r}
+#plot ACF
+ggAcf(inf) + ggtitle("ACF for Inflation")
+```
+
+The ACF shows slowly decaying autocorrelations, indicating non-stationarity.We can see
+high persistence from the ACF plot, however over multiple years, it falls to zero.
+
+
+```{r}
+#plot PACF
+ggPacf(inf) + ggtitle("PACF for Inflation")
+```
+
+The PACF presents significant lags suggesting long-term dependencies.
+
+```{r}
+#create the first difference
+inf_diff <- diff(inf)
+
+#plot the first difference
+ts.plot(inf_diff, col=2, xlab="Year", ylab="Percent", main="Inflation First Difference", lwd=2)
+```
+
+The differenced series seems more stable, suggesting a stationary process.
+
+```{r}
+#plot ACF of first difference
+ggAcf(inf_diff) + ggtitle("ACF for Inflation FD")
+```
+
+The ACF of the first difference decreases rapidly.
+
+```{r}
+#plot PACF of first difference
+ggPacf(inf_diff) + ggtitle("PACF for Inflation FD")
+```
+
+The PACF also drops after the first lags, indicating short memory after differencing.
+
+The first difference appears to be a stationary process. The variance seems stable based on the plots, and the autocovariances are generally not statistically significant, except perhaps for the second lag. This pattern suggests the presence of a possible unit root, which motivates a formal statistical test.
+
+```{r}
+#unit root tests
+type1id = ur.df(inf_diff, type = "none", selectlags = "AIC")
+summary(type1id)
+```
+
+```{r}
+type2id = ur.df(inf_diff, type = "drift", selectlags = "AIC")
+summary(type2id)
+```
+
+```{r}
+type3id = ur.df(inf_diff, type="trend", selectlags="AIC")
+summary(type3id)
+```
+
+Regardless of the specification used, all tests indicate that the series is stationary. Therefore, we can conclude that the series does not contain a
+unit root and is suitable for further analysis.
+
+
+```{r}
+#arma model selection
+mean_equ <- auto.arima(inf_diff)
+summary(mean_equ)
+```
+
+The automatic selection suggests an ARMA(2,0) model.
+
+```{r}
+#fit AR(2) model
+arma_inf <- arima(inf_diff, order=c(2,0,0), method="ML")
+summary(arma_inf)
+```
+
+The AR(2) model estimates ar1=0.41 and ar2=-0.47, both statistically significant.
+
+```{r}
+#check residuals
+Box.test(arma_inf$residuals, lag=10, type="Ljung-Box")
+```
+
+The null hypothesis is not rejected, suggesting the series shows no significant serial correlation, allowing us to proceed with forecasting.
+
+```{r}
+#plot diagnostic
+#residuals analysis
+checkresiduals(arma_inf)
+```
+
+
+```{r}
+#forecast
+n_steps <- 50
+forecast_values <- predict(arma_inf, n.ahead=n_steps)$pred
+forecast_values_se <- predict(arma_inf, n.ahead=n_steps)$se
+
+#plot forecast with confidence interval
+ts.plot(inf_diff, xlim=c(1960,2035))
+points(forecast_values, type='l', col=2)
+lines(forecast_values + 1.96*forecast_values_se, col='blue', lty=2)
+lines(forecast_values - 1.96*forecast_values_se, col='blue', lty=2)
+```
+
+The forecast suggests a moderate continuation of the past dynamics with confidence bands widening progressively.
+
+
+### 2.1.2: GDP
+
+```{r}
+#load the dataset
+gdp_df <- read.csv("gdp_usa.csv")
+
+GDP1 <-rename(gdp_df,gdp = GDPC1)
+gdp <- ts(GDP1[,2], frequency = 4, start = c(1947, 1)) # Quaterly
+str(gdp)
+
+```
+
+The dataset contains US annual GDP series. Values are on a large scale and exhibit a clear upward trend.
+
+```{r}
+#descriptive statistics
+summary(gdp)
+```
+
+The series has a mean of approximately 10148 and a maximum reaching over 23500.
+
+```{r}
+#plot the time series
+plot(gdp, main="US GDP Time Series", col=2, ylab="GDP", xlab="Time", lwd=2)
+```
+
+The graph shows strong economic growth over the period.We see That the GDP has an increasing trend with some variations and after running this code, we clearly see that GDP is not stationary
+
+```{r}
+#acf and pacf
+ggAcf(gdp) + ggtitle("ACF for GDP")
+ggPacf(gdp) + ggtitle("PACF for GDP")
+```
+
+Both ACF and PACF suggest non-stationarity, with slow decay in autocorrelations.The ACF
+takes a lot of periods to go back to 0, more than fit in the graph.
+
+```{r}
+#first difference
+gdp_diff <- diff(gdp)
+ts.plot(gdp_diff, col=2, xlab="Year", ylab="Percent", main="GDP US First Difference", lwd=2)
+
+#acf and pacf of the diff
+ggAcf(gdp_diff) + ggtitle("ACF for GDP FD")
+ggPacf(gdp_diff) + ggtitle("PACF for GDP FD")
+```
+
+GDP first difference seems to be more like a stationary time series, with the
+exception of the last period, in which the variance is clearly higher. We don’t observe any seasonality from the first differences. So we will use the first difference data for the rest of our analysis.
+
+
+```{r}
+#ADF tests
+ur.df(gdp_diff, type="none", selectlags="AIC")
+ur.df(gdp_diff, type="drift", selectlags="AIC")
+ur.df(gdp_diff, type="trend", selectlags="AIC")
+```
+
+ADF tests confirm stationarity after differencing with test statistics well below critical values.
+
+```{r}
+#arma selection
+mean_equ_gdp <- auto.arima(gdp_diff)
+summary(mean_equ_gdp)
+```
+
+The model selected is ARIMA(3,1,1)(1,0,0) with significant coefficients and a seasonal period of 4.
+
+```{r}
+#fit ARMA
+arma_gdp <- arima(gdp_diff, order=c(3,1,1), seasonal=list(order=c(1,0,0), period=4), method="ML")
+summary(arma_gdp)
+```
+
+The estimated model includes AR(3), MA(1), and seasonal AR(1) components.
+
+```{r}
+#residuals
+test_gdp <- Box.test(arma_gdp$residuals, lag=10, type="Ljung-Box")
+checkresiduals(arma_gdp)
+```
+The null hypothesis is not rejected, suggesting that the series does not exhibit significant serial correlation, which allows us to use it for forecasting.
+
+
+```{r}
+#forecast
+n_steps <- 50
+forecast_gdp <- predict(arma_gdp, n.ahead=n_steps)
+ts.plot(gdp_diff, xlim=c(1960,2035))
+points(forecast_gdp$pred, type='l', col=2)
+lines(forecast_gdp$pred + 1.96*forecast_gdp$se, col='blue', lty=2)
+lines(forecast_gdp$pred - 1.96*forecast_gdp$se, col='blue', lty=2)
+```
+
+The forecast shows smooth dynamics with widening prediction intervals.
+
+
+
+### 2.1.3: Short-term Interest Rate
+
+```{r}
+#load interest rate data
+int_df <- read.csv("ir_usa.csv")
+
+interestrate1 <-rename(int_df ,rate = REAINTRATREARAT1MO)
+int_rate <- ts(interestrate1[,2], frequency = 12, start = c(1982, 1)) # monthly
+
+#structure
+str(int_rate)
+```
+
+The series consists of monthly US short-term interest rates starting from 1982.
+
+```{r}
+#descriptive statistics
+summary(int_rate)
+```
+
+The series has a mean around 3.41 with values ranging from 0.02 to 10.05, indicating high variability.
+
+```{r}
+#plot the time series
+plot(int_rate, main="Short-term Interest Rate US", col=2, ylab="Rate", xlab="Time", lwd=2)
+```
+
+The plot shows a decreasing trend after the 1980s and high volatility around 2008.
+The interest rate is not a stationary time series, as not the mean and clearly not the variance look constant from the plot.
+
+```{r}
+#acf and pacf
+ggAcf(int_rate) + ggtitle("ACF for Interest Rate")
+ggPacf(int_rate) + ggtitle("PACF for Interest Rate")
+```
+
+The ACF decays slowly suggesting non-stationarity, and PACF shows significant spikes.
+This can be seen also
+from the ACF, that although decreasing in the lag is pretty far from converging to 0.
+
+
+```{r}
+#first difference
+int_rate_diff <- diff(int_rate)
+ts.plot(int_rate_diff, col=2, xlab="Year", ylab="Percent", main="Interest Rate US First Difference", lwd=2)
+
+#acf and pacf of the diff
+ggAcf(int_rate_diff) + ggtitle("ACF for Interest Rate FD")
+ggPacf(int_rate_diff) + ggtitle("PACF for Interest Rate FD")
+```
+
+With respect to the first difference, it is hard to argue in favor of stationarity because of the variance not being constant. The ACF decreases very
+quickly. Since the first difference seem more stationary than the interest rate we will use it for our analisys.
+
+
+```{r}
+#unit root tests
+type1id = ur.df(int_rate_diff, type = "none", selectlags = "AIC")
+summary(type1id)
+```
+
+```{r}
+type2id = ur.df(int_rate_diff, type = "drift", selectlags = "AIC")
+summary(type2id)
+```
+
+```{r}
+type3id = ur.df(int_rate_diff, type="trend", selectlags="AIC")
+summary(type3id)
+```
+
+Regardless of the specification used, all tests indicate that the series is stationary. Therefore, we can conclude that the series does not contain a
+unit root and is suitable for further analysis.
+
+```{r}
+#arma selection
+mean_equ_int <- auto.arima(int_rate_diff)
+summary(mean_equ_int)
+```
+
+The model selected is ARIMA(3,0,2)(1,0,0) with significant coefficients and a seasonal period of 12.
+
+```{r}
+#fit ARMA
+arma_int <- arima(int_rate_diff,
+order=c(3, 0, 2), # Non-seasonal order (p, d, q)
+seasonal=list(order=c(1, 0, 0), period=12), # Seasonal order (P, D, Q) and period
+method="ML")
+summary(arma_int)
+```
+
+The fitted model combines AR(3), MA(2), and seasonal AR(1) components.
+
+```{r}
+#residuals
+Box.test(arma_int$residuals, lag=10, type="Ljung-Box")
+checkresiduals(arma_int)
+```
+
+Since we fail to reject the null hypothesis, the series does not present significant serial correlation, making it suitable for forecasting.
+
+
+
+```{r}
+#forecast
+n_steps <- 50
+forecast_int <- predict(arma_int, n.ahead=n_steps)
+ts.plot(int_rate_diff, xlim=c(1982,2030))
+points(forecast_int$pred, type='l', col=2)
+lines(forecast_int$pred + 1.96*forecast_int$se, col='blue', lty=2)
+lines(forecast_int$pred - 1.96*forecast_int$se, col='blue', lty=2)
+```
+
+The forecast shows moderate volatility persistence with uncertainty increasing as expected.
+
+## 2.2: Question 2
+
+### 2.2.1: Inflation in-sample
+
+
+```{r}
+#split into training (80%) and testing (20%) sets properly
+split_point <- time(inf_diff)[floor(length(inf_diff) * 0.8)]
+
+#training set goes up to split_point
+train_infd <- window(inf_diff, end=split_point)
+
+#testing set starts right after split_point
+test_infd <- window(inf_diff, start=split_point + deltat(inf_diff))
+
+#check lengths
+length(train_infd)
+length(test_infd)
+```
+
+The dataset is split into 80% for training and 20% for testing, ensuring enough data for model estimation and validation.
+
+
+```{r}
+#estimate model on training
+model1_infd <- arima(train_infd, order=c(2,0,0))
+summary(model1_infd)
+
+#forecast
+fc1_infd <- forecast(model1_infd, h=length(test_infd))
+
+#forecast plot
+autoplot(fc1_infd) +
+  autolayer(test_infd, series="Test", color="red") +
+  ggtitle("Inflation Forecast AR(2) with Test Set") +
+  theme_minimal()
+```
+
+The AR(2) model captures part of the structure but visually underestimates some peaks and valleys of the test data.
+
+```{r}
+#estimate model on training
+model2_infd <- arima(train_infd, order=c(0,0,2))
+summary(model2_infd)
+
+#forecast
+fc2_infd <- forecast(model2_infd, h=length(test_infd))
+
+#forecast plot
+autoplot(fc2_infd) +
+  autolayer(test_infd, series="Test", color="red") +
+  ggtitle("Inflation Forecast MA(2) with Test Set") +
+  theme_minimal()
+```
+
+The MA(2) model seems to follow better the sharp fluctuations but tends to have wider confidence bands.
+
+```{r}
+#estimate model on training
+model3_infd <- arima(train_infd, order=c(2,0,2))
+summary(model3_infd)
+
+#forecast
+fc3_infd <- forecast(model3_infd, h=length(test_infd))
+
+#forecast plot
+autoplot(fc3_infd) +
+  autolayer(test_infd, series="Test", color="red") +
+  ggtitle("Inflation Forecast ARMA(2,2) with Test Set") +
+  theme_minimal()
+```
+
+The ARMA(2,2) model provides the closest match to the test data in terms of level and variability.
+
+```{r}
+#compare the accuracy of all models
+accuracy(fc1_infd, test_infd)
+accuracy(fc2_infd, test_infd)
+accuracy(fc3_infd, test_infd)
+
+```
+
+The ARMA(2,2) outperforms the AR(2) and MA(2) models based on RMSE and MAE.
+
+### 2.2.2: Inflation out-of-sample
+
+
+```{r}
+#estimate model on training
+model1_infd_full <- arima(inf_diff, order=c(2,0,0))
+
+#forecast
+fc1_infd_full <- forecast(model1_infd_full, h=30)
+
+#forecast plot
+autoplot(fc1_infd_full)  +
+  ggtitle("Inflation Forecast AR(2) out-of-sample") +
+  theme_minimal()
+```
+
+The AR(2) model provides smooth and conservative forecasts.
+
+```{r}
+#estimate model on full dataset
+model2_infd_full <- arima(inf_diff, order=c(0,0,2))
+
+#forecast
+fc2_infd_full <- forecast(model2_infd_full, h=30)
+
+#forecast plot
+autoplot(fc2_infd_full) +
+  ggtitle("Inflation Forecast MA(2) out-of-sample") +
+  theme_minimal()
+```
+
+The MA(2) model produces wider confidence bands, reflecting more uncertainty in volatility.
+
+```{r}
+#estimate model on full dataset
+model3_infd_full <- arima(inf_diff, order=c(2,0,2))
+
+#forecast
+fc3_infd_full <- forecast(model3_infd_full, h=30)
+
+#forecast plot
+autoplot(fc3_infd_full) +
+  ggtitle("Inflation Forecast ARMA(2,2) out-of-sample") +
+  theme_minimal()
+```
+
+The ARMA(2,2) model maintains good dynamics and realistic variability for out-of-sample forecasts.
+
+### 2.2.3: GDP in-sample
+
+```{r}
+#split GDP into training (80%) and testing (20%) sets
+split_point_gdp <- time(gdp_diff)[floor(length(gdp_diff) * 0.8)]
+
+train_gdpd <- window(gdp_diff, end=split_point_gdp)
+test_gdpd <- window(gdp_diff, start=split_point_gdp + deltat(gdp_diff))
+
+length(train_gdpd)
+length(test_gdpd)
+```
+
+The GDP dataset is also split 80/20 for model validation.
+
+```{r}
+model1_gdpd <- arima(train_gdpd, order=c(3,1,1), seasonal=list(order=c(1,0,0), period=4), method="ML")
+summary(model1_gdpd)
+
+fc1_gdpd <- forecast(model1_gdpd, h=length(test_gdpd))
+
+autoplot(fc1_gdpd) +
+  autolayer(test_gdpd, series="Test", color="red") +
+  ggtitle("GDP Forecast AR(3,1,1)(1,0,0) with Test Set") +
+  theme_minimal()
+```
+
+The AR(3,1,1)(1,0,0) model fits reasonably well but underestimates some recent peaks.
+
+```{r}
+model2_gdpd <- arima(train_gdpd, order=c(4,2,3), seasonal=list(order=c(2,0,3), period=4), method="ML")
+summary(model2_gdpd)
+
+fc2_gdpd <- forecast(model2_gdpd, h=length(test_gdpd))
+
+autoplot(fc2_gdpd) +
+  autolayer(test_gdpd, series="Test", color="red") +
+  ggtitle("GDP Forecast ARIMA(4,2,3)(2,0,3) with Test Set") +
+  theme_minimal()
+```
+
+This model seems to capture seasonality better but shows some instability.
+
+```{r}
+model3_gdpd <- arima(train_gdpd, order=c(2,0,5), seasonal=list(order=c(8,0,1), period=4), method="ML")
+summary(model3_gdpd)
+
+fc3_gdpd <- forecast(model3_gdpd, h=length(test_gdpd))
+
+autoplot(fc3_gdpd) +
+  autolayer(test_gdpd, series="Test", color="red") +
+  ggtitle("GDP Forecast ARIMA(2,0,5)(8,0,1) with Test Set") +
+  theme_minimal()
+```
+
+The ARIMA(2,0,5)(8,0,1) model seems overfitted with too much variability and a poor match to the test data.
+
+```{r}
+accuracy(fc1_gdpd, test_gdpd)
+accuracy(fc2_gdpd, test_gdpd)
+accuracy(fc3_gdpd, test_gdpd)
+```
+
+Among the three, the first model has the best trade-off between bias and variance.
+
+### 2.2.4: GDP out-of-sample
+
+```{r}
+#model 1
+model1_gdpd_full <- arima(gdp_diff, order=c(3,1,1), seasonal=list(order=c(1,0,0), period=4))
+fc1_gdpd_full <- forecast(model1_gdpd_full, h=30)
+autoplot(fc1_gdpd_full) +
+  ggtitle("GDP Forecast AR(3,1,1)(1,0,0) out-of-sample") +
+  theme_minimal()
+```
+
+This model continues to produce plausible forecasts.
+
+```{r}
+#model 2
+model2_gdpd_full <- arima(gdp_diff, order=c(4,2,3), seasonal=list(order=c(2,0,3), period=4))
+fc2_gdpd_full <- forecast(model2_gdpd_full, h=30)
+autoplot(fc2_gdpd_full) +
+  ggtitle("GDP Forecast ARIMA(4,2,3)(2,0,3) out-of-sample") +
+  theme_minimal()
+```
+
+The model is less stable and produces higher variance in forecasts.
+
+```{r}
+#model 3
+model3_gdpd_full <- arima(gdp_diff, order=c(2,0,5), seasonal=list(order=c(8,0,1), period=4))
+fc3_gdpd_full <- forecast(model3_gdpd_full, h=30)
+autoplot(fc3_gdpd_full) +
+  ggtitle("GDP Forecast ARIMA(2,0,5)(8,0,1) out-of-sample") +
+  theme_minimal()
+```
+
+This third model continues to show instability likely due to overparameterization.
+
+### 2.2.5: Short-term Interest Rate in-sample
+
+```{r}
+split_point_int <- time(int_rate_diff)[floor(length(int_rate_diff) * 0.8)]
+
+train_intd <- window(int_rate_diff, end=split_point_int)
+test_intd <- window(int_rate_diff, start=split_point_int + deltat(int_rate_diff))
+
+length(train_intd)
+length(test_intd)
+```
+
+The interest rate series is split with 80% for training and 20% for testing.
+
+```{r}
+model1_intd <- arima(train_intd,order=c(3, 0, 2),seasonal=list(order=c(1, 0, 0), period=12),method="ML")
+summary(model1_intd)
+
+fc1_intd <- forecast(model1_intd, h=length(test_intd))
+
+autoplot(fc1_intd) +
+  autolayer(test_intd, series="Test", color="red") +
+  ggtitle("Interest Rate Forecast ARIMA(3,0,2)(1,0,0) with Test Set") +
+  theme_minimal()
+```
+
+The ARIMA(3,0,2)(1,0,0) model captures well the seasonal pattern but tends to slightly underestimate volatility.
+
+```{r}
+model2_intd <- arima(train_intd,order=c(7, 2, 4),seasonal=list(order=c(0, 1, 2), period=12),method="ML")
+summary(model2_intd)
+
+fc2_intd <- forecast(model2_intd, h=length(test_intd))
+
+autoplot(fc2_intd) +
+  autolayer(test_intd, series="Test", color="red") +
+  ggtitle("Interest Rate Forecast ARIMA(7,2,4)(0,1,2) with Test Set") +
+  theme_minimal()
+```
+
+The second model displays higher flexibility but suffers from large forecast intervals and unstable predictions.
+
+```{r}
+model3_intd <- arima(train_intd,order=c(0, 1, 5),seasonal=list(order=c(4, 3, 1), period=12),method="ML")
+summary(model3_intd)
+
+fc3_intd <- forecast(model3_intd, h=length(test_intd))
+
+autoplot(fc3_intd) +
+  autolayer(test_intd, series="Test", color="red") +
+  ggtitle("Interest Rate Forecast ARIMA(0,1,5)(4,3,1) with Test Set") +
+  theme_minimal()
+```
+
+The third model shows instability and overfitting symptoms with exaggerated forecast uncertainty.
+
+```{r}
+accuracy(fc1_intd, test_intd)
+accuracy(fc2_intd, test_intd)
+accuracy(fc3_intd, test_intd)
+```
+
+Among the three, the first model (ARIMA(3,0,2)(1,0,0)) offers the most balanced fit with lower RMSE and MAE.
+
+### 2.2.6: Short-term Interest Rate out-of-sample
+
+```{r}
+#model 1
+model1_intd_full <- arima(int_rate_diff,order=c(3, 0, 2),seasonal=list(order=c(1, 0, 0), period=12))
+fc1_intd_full <- forecast(model1_intd_full, h=30)
+autoplot(fc1_intd_full) +
+  ggtitle("Interest Rate Forecast ARIMA(3,0,2)(1,0,0) out-of-sample") +
+  theme_minimal()
+```
+
+The out-of-sample forecast remains stable and coherent with past dynamics.
+
+```{r}
+#model 2
+model2_intd_full <- arima(int_rate_diff,order=c(7, 2, 4),seasonal=list(order=c(0, 1, 2), period=12))
+fc2_intd_full <- forecast(model2_intd_full, h=30)
+autoplot(fc2_intd_full) +
+  ggtitle("Interest Rate Forecast ARIMA(7,2,4)(0,1,2) out-of-sample") +
+  theme_minimal()
+```
+
+The second model shows too much variability and a tendency to diverge.
+
+```{r}
+#model 3
+model3_intd_full <- arima(int_rate_diff,order=c(0, 1, 5),seasonal=list(order=c(4, 3, 1), period=12))
+fc3_intd_full <- forecast(model3_intd_full, h=30)
+autoplot(fc3_intd_full) +
+  ggtitle("Interest Rate Forecast ARIMA(0,1,5)(4,3,1) out-of-sample") +
+  theme_minimal()
+```
+
+The third model forecasts remain unstable and excessively wide, suggesting an overfitted model.
+
+# Problem 3
+
+## 3.1: Question 1
+
+Using log-returns has several advantages:
+
+-   log-returns are time-additive, which is useful when aggregating over different periods\
+-   if prices follow a log-normal distribution, log-returns will follow a normal distribution, making modeling easier\
+-   log-returns are unbounded on both sides, whereas simple returns are bounded below by -1\
+-   they approximate percentage changes and are easier to interpret in financial terms\
+-   log transformation often stabilizes variance, helping with the stationarity assumption
+
+Technically, log-returns are calculated as the difference of the logarithm of consecutive prices.\
+This can be implemented in R using:
+
+log_returns \<- diff(log(data\$Dernier))
+
+## 3.2: Question 2
+
+```{r}
+#load the dataset
+data <- read.csv("IBEX35k.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+#show the first rows to check the import
+head(data)
+```
+
+The dataset shows six recent observations of IBEX35. Variables include Date, Dernier (closing price), Volume, and Variation. Note that the database contains numbers formatted as in European conventions (e.g., "13.063,87"), which are not directly interpretable by R as numeric values.
+
+```{r}
+#convert Date column into Date format
+data$Date <- as.Date(data$Date, format = "%d/%m/%Y")
+
+#clean the price column
+#remove thousands separator
+data$Dernier <- gsub("\\.", "", data$Dernier)
+#replace commas by dots
+data$Dernier <- gsub(",", ".", data$Dernier)
+#convert to numeric
+data$Dernier <- as.numeric(data$Dernier)
+```
+
+The 'Dernier' column is successfully cleaned and converted into numeric format by removing thousand separators and adjusting decimal points.
+
+```{r}
+#extract closing prices
+prices <- data$Dernier
+#compute log returns
+log_returns <- diff(log(prices))
+#add log returns to the dataframe
+data$log_returns <- c(NA, log_returns)
+#check the result
+head(data)
+```
+
+The first computed log-returns are displayed. The values range between small positive and negative percentages.
+
+```{r}
+#compute descriptive statistics
+mean_log_return <- mean(log_returns, na.rm = TRUE)
+variance_log_return <- var(log_returns, na.rm = TRUE)
+skewness_log_return <- skewness(log_returns, na.rm = TRUE)
+kurtosis_log_return <- kurtosis(log_returns, na.rm = TRUE)
+
+#ACF and PACF
+acf_log_returns <- acf(log_returns, plot = FALSE)
+pacf_log_returns <- pacf(log_returns, plot = FALSE)
+
+#print the statistics
+cat("Mean of log-returns:", mean_log_return, "\n")
+cat("Variance of log-returns:", variance_log_return, "\n")
+cat("Skewness of log-returns:", skewness_log_return, "\n")
+cat("Kurtosis of log-returns:", kurtosis_log_return, "\n")
+```
+
+The mean is close to zero. The variance is small. The skewness is positive and the kurtosis is strongly positive.
+
+```{r}
+#plot log-returns
+ggplot(data, aes(x=Date, y=log_returns)) +
+  geom_line(color="blue") +
+  labs(title="Log-Returns of IBEX35", x="Date", y="Log-Returns") +
+  theme_minimal()
+```
+
+The plot shows frequent oscillations around zero with visible periods of larger deviations.
+
+```{r}
+#plot histogram of log-returns
+ggplot(data, aes(x=log_returns)) +
+  geom_histogram(binwidth=0.0005, fill="blue", color="black", alpha=0.7) +
+  labs(title="Histogram of Log-Returns", x="Log-Return", y="Frequency") +
+  theme_minimal()
+```
+
+The histogram shows a centered distribution with heavy tails.
+
+```{r}
+#plot ACF
+ggAcf(log_returns) + ggtitle("ACF of Log-Returns")
+
+```
+
+The ACF of log-returns shows no significant autocorrelation.
+
+```{r}
+#plot PACF
+ggPacf(log_returns) + ggtitle("PACF of Log-Returns")
+
+```
+
+The PACF does not show significant partial autocorrelations.
+
+## 3.3: Question 3
+
+```{r}
+#ADF test with lag selection by AIC
+adf_test <- ur.df(log_returns, type = "drift", selectlags = "AIC")
+summary(adf_test)
+```
+
+The ADF test provides a test statistic of -33.65 and a p-value close to zero. Critical values are -3.43 (1%), -2.86 (5%), and -2.57 (10%).The ADF statistic is -33.65, lower than the critical values, indicating stationarity.
+
+```{r}
+#select ARMA(p,q) using auto.arima()
+mean_equ <- auto.arima(log_returns, seasonal=FALSE)
+summary(mean_equ)
+#extract orders
+best_arma_order <- arimaorder(mean_equ)[1:2]
+print(paste("Selected ARMA order:", paste(best_arma_order, collapse=",")))
+```
+
+The estimated ARMA order is (0,0).
+
+```{r}
+#plot squared returns
+ggAcf(log_returns^2) + ggtitle("ACF of Squared Log-Returns")
+```
+
+The ACF of squared returns shows several significant lags, justifying the use of a GARCH model to capture conditional heteroskedasticity.
+
+```{r}
+#grid search
+p_range <- 1:3
+q_range <- 1:3
+aic_values <- matrix(NA, nrow=3, ncol=3)
+bic_values <- matrix(NA, nrow=3, ncol=3)
+
+for(i in 1:3){
+  for(j in 1:3){
+    spec <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(i,j)),
+                       mean.model = list(armaOrder=best_arma_order, include.mean=TRUE),
+                       distribution.model = "norm")
+    fit <- tryCatch(ugarchfit(spec=spec, data=log_returns), error=function(e) NULL)
+    if(!is.null(fit)){
+      loglik <- fit@fit$LLH
+      n <- length(log_returns)
+      k <- length(fit@fit$coef)
+      aic_values[i,j] <- -2*loglik + 2*k
+      bic_values[i,j] <- -2*loglik + k*log(n)
+    }
+  }
+}
+
+#find best
+best_aic <- which(aic_values == min(aic_values, na.rm=TRUE), arr.ind=TRUE)
+best_bic <- which(bic_values == min(bic_values, na.rm=TRUE), arr.ind=TRUE)
+
+print(paste("Best GARCH order (AIC):", paste(c(best_aic[1], best_aic[2]), collapse=",")))
+print(paste("Best GARCH order (BIC):", paste(c(best_bic[1], best_bic[2]), collapse=",")))
+```
+
+The grid search reveals that GARCH(2,1) minimizes AIC while GARCH(1,1) minimizes BIC.
+
+```{r}
+#final model based on BIC
+spec_final <- ugarchspec(variance.model = list(model="sGARCH", garchOrder= c(best_bic[1], best_bic[2])),
+                         mean.model = list(armaOrder=best_arma_order, include.mean=TRUE),
+                         distribution.model="norm")
+fit_final <- ugarchfit(spec=spec_final, data=log_returns)
+summary(fit_final)
+```
+
+The GARCH(1,1) model is fitted and the output provides estimated coefficients and standard errors.
+
+## 3.4: Question 4
+
+```{r}
+#check residuals
+Box.test(fit_final@fit$residuals, lag=10, type="Ljung-Box")
+```
+
+The Ljung-Box test yields a p-value of 0.0067, showing residual autocorrelation is still present.
+
+```{r}
+#plot volatility
+vol <- ts(fit_final@fit$sigma)
+autoplot(vol,col = 4,ylab = "Volatility", lwd = 1) + ggtitle("Volatility Estimate")
+```
+
+The volatility series shows clusters of periods with higher volatility.
+
+```{r}
+#plot combined
+autoplot(cbind(log_returns, vol, -vol),xlab = "time",ylab = "",main = "GARCH(1,1)",lwd=0.9) + ggtitle("Log-returns with Volatility Band")
+```
+
+The combined plot shows log-returns oscillating mostly within the ±1 conditional standard deviation bands.
